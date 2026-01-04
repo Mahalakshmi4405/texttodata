@@ -7,3 +7,10 @@ node_modules/
 .DS_Store
 sample_data.db
 sales.db
+talktodata.db
+uploads/
+*.db-journal
+.next/
+build/
+dist/
+
