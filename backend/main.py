@@ -3,11 +3,12 @@
 from fastapi import FastAPI, File, UploadFile, Depends, HTTPException, Form
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session as DBSession
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import List, Optional, Dict
 import shutil
 import os
 from pathlib import Path
+from contextlib import asynccontextmanager
 
 from config import get_db, init_database, get_settings
 from models import Session, DataSource, QueryHistory
@@ -17,11 +18,22 @@ from services.query_executor import query_executor
 from services.session_manager import session_manager
 from agents.llm_agent import LLMAgent
 
+# Lifespan context manager for startup/shutdown
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    init_database()
+    print("[SUCCESS] Talk-to-Data AI Backend Ready!")
+    yield
+    # Shutdown (if needed)
+    print("[INFO] Shutting down...")
+
 # Initialize app
 app = FastAPI(
     title="Talk-to-Data AI",
     description="Enterprise-grade natural language to data querying system",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan
 )
 
 # CORS middleware
@@ -45,13 +57,12 @@ class SessionCreate(BaseModel):
     name: str
 
 class SessionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    
     id: int
     name: str
     created_at: str
     data_sources: List[Dict]
-    
-    class Config:
-        from_attributes = True
 
 class QueryRequest(BaseModel):
     session_id: int
@@ -67,12 +78,6 @@ class QueryResponse(BaseModel):
 
 
 # Routes
-
-@app.on_event("startup")
-async def startup():
-    """Initialize database on startup"""
-    init_database()
-    print("✅ Talk-to-Data AI Backend Ready!")
 
 
 @app.get("/")
@@ -186,13 +191,13 @@ async def upload_data(
         # Get schema
         schema = data_ingestor.get_schema(df)
         
-        # Add to database
+        # Add to database - use relative path for portability
         data_source = session_manager.add_data_source(
             db=db,
             session_id=session_id,
             name=file.filename,
             source_type=metadata['format'],
-            file_path=str(file_path),
+            file_path=str(file_path),  # Relative path
             schema=schema,
             row_count=len(df)
         )
@@ -260,8 +265,15 @@ async def execute_query(
     ds = data_sources[0]
     schema = ds.schema
     
-    # Load DataFrame
-    df, _ = data_ingestor.ingest(ds.file_path)
+    # Load DataFrame - resolve relative path from backend directory
+    file_path = Path(ds.file_path)
+    if not file_path.is_absolute():
+        # If relative, resolve from current working directory (backend folder)
+        file_path = Path.cwd() / file_path
+    df, _ = data_ingestor.ingest(str(file_path))
+    
+    # Register DataFrame with DuckDB for querying
+    query_executor.register_dataframe(session_id, df, table_name="data")
     
     try:
         # Generate SQL
@@ -374,4 +386,4 @@ async def delete_session(session_id: int, db: DBSession = Depends(get_db)):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

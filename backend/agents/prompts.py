@@ -17,14 +17,27 @@ Your task is to:
 5. Use proper SQL syntax and best practices
 
 Guidelines:
-- Use clear column and table names
-- Apply appropriate aggregations (SUM, AVG, COUNT, etc.)
+- For exploratory questions like "what is this about", "describe data", "show sample": SELECT * FROM data LIMIT 10
+- For column count questions: SELECT COUNT(*) as column_count FROM information_schema.columns WHERE table_name = 'data'
+- For duplicate analysis per column: Use COUNT(*) - COUNT(DISTINCT column_name) for each column
+- For "each column" stats: You may need to create multiple SELECT statements with UNION ALL
+- Use clear column and table names from the schema
+- Apply appropriate aggregations (SUM, AVG, COUNT, MIN, MAX, COUNT(DISTINCT), etc.)
 - Use GROUP BY when aggregating by categories
 - Use ORDER BY for sorting (DESC for top/highest, ASC for bottom/lowest)
-- Add LIMIT for "top N" queries
+- Add LIMIT for "top N" queries (default to LIMIT 100 if not specified)
 - Use JOINs when multiple tables are involved
-- Handle NULL values appropriately
-- Use date functions when working with timestamps
+- Handle NULL values with IS NULL / IS NOT NULL / COALESCE
+- Use date functions (YEAR, MONTH, DATE_TRUNC, EXTRACT) for timestamps
+- For statistical analysis: use STDDEV, VARIANCE, PERCENTILE_CONT where appropriate
+
+Special Patterns:
+- "How many X": Use COUNT(*)
+- "Top 10 X by Y": Use ORDER BY Y DESC LIMIT 10
+- "Average/Mean": Use AVG()
+- "Total/Sum": Use SUM()
+- "Unique values": Use COUNT(DISTINCT column_name)
+- "Duplicates": Use GROUP BY ... HAVING COUNT(*) > 1
 
 Return ONLY the SQL query. Do not include explanations, markdown code blocks, or any other text.
 """

@@ -1,9 +1,10 @@
-# LLM Agent for Natural Language Query Understanding
+# LLM Agent with Dual Provider Support (Gemini + Ollama)
 
 import google.generativeai as genai
+import ollama
 from config import get_settings
 import pandas as pd
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, List
 import json
 from agents.prompts import (
     SYSTEM_PROMPT, 
@@ -14,12 +15,62 @@ from agents.prompts import (
 
 
 class LLMAgent:
-    """Google Gemini-powered agent for NL to SQL translation"""
+    """Dual-provider LLM agent supporting Google Gemini and local Ollama"""
     
     def __init__(self):
         settings = get_settings()
-        genai.configure(api_key=settings.gemini_api_key)
-        self.model = genai.GenerativeModel('gemini-1.5-flash')
+        self.provider = settings.llm_provider.lower()
+        
+        if self.provider == "gemini":
+            genai.configure(api_key=settings.gemini_api_key)
+            self.gemini_models = [
+                'gemini-2.5-flash-lite',
+                'gemini-flash-latest', 
+                'gemini-2.5-flash'
+            ]
+            self.model = genai.GenerativeModel(self.gemini_models[0])
+        
+        elif self.provider == "ollama":
+            self.ollama_base_url = settings.ollama_base_url
+            self.ollama_model = settings.ollama_model
+            self.available_models = self._get_ollama_models()
+            
+            # Auto-select model if configured one not available
+            if self.ollama_model not in self.available_models and self.available_models:
+                self.ollama_model = self.available_models[0]
+                print(f"⚠️ Configured model not found. Using: {self.ollama_model}")
+        
+        else:
+            raise ValueError(f"Unknown LLM provider: {self.provider}. Use 'gemini' or 'ollama'")
+    
+    def _get_ollama_models(self) -> List[str]:
+        """Fetch available Ollama models"""
+        try:
+            models_response = ollama.list()
+            models = [model['name'] for model in models_response.get('models', [])]
+            if models:
+                print(f"✅ Found {len(models)} Ollama models: {', '.join(models)}")
+            return models
+        except Exception as e:
+            print(f"⚠️ Could not fetch Ollama models: {e}")
+            return []
+    
+    def _generate_content(self, prompt: str, temperature: float = 0.2) -> str:
+        """Universal content generation across providers"""
+        if self.provider == "gemini":
+            response = self.model.generate_content(
+                prompt,
+                generation_config=genai.GenerationConfig(temperature=temperature)
+            )
+            return response.text.strip()
+        
+        elif self.provider == "ollama":
+            response = ollama.generate(
+                model=self.ollama_model,
+                prompt=prompt,
+                options={'temperature': temperature}
+            )
+            return response['response'].strip()
     
     def generate_sql(
         self, 
@@ -56,8 +107,7 @@ class LLMAgent:
         # Generate SQL
         full_prompt = f"{system_prompt}\n\nUser question: {question}\n\nSQL query:"
         
-        response = self.model.generate_content(full_prompt)
-        sql_query = response.text.strip()
+        sql_query = self._generate_content(full_prompt, temperature=0.2)
         
         # Clean up the response
         sql_query = self._clean_sql(sql_query)
@@ -95,8 +145,7 @@ class LLMAgent:
         
         prompt += f"\n\nSchema:\n{schema_desc}\n\nSQL query:"
         
-        response = self.model.generate_content(prompt)
-        refined_query = response.text.strip()
+        refined_query = self._generate_content(prompt, temperature=0.2)
         
         return self._clean_sql(refined_query)
     
@@ -139,14 +188,20 @@ class LLMAgent:
             quality_issues=quality_issues
         )
         
-        response = self.model.generate_content(prompt)
-        insights_text = response.text.strip()
+        insights_text = self._generate_content(prompt, temperature=0.3)
+        
+        # Clean markdown code blocks
+        insights_text = insights_text.replace('```json', '').replace('```', '').strip()
         
         # Try to parse as JSON, fallback to raw text
         try:
             insights_list = json.loads(insights_text)
-            return "\n\n".join([f"• {insight}" for insight in insights_list[:max_insights]])
+            if isinstance(insights_list, list):
+                return "\n\n".join([f"• {insight}" for insight in insights_list[:max_insights]])
+            else:
+                return insights_text
         except:
+            # If not JSON, return as is
             return insights_text
     
     def suggest_visualization(
@@ -180,8 +235,7 @@ class LLMAgent:
             sample_result=json.dumps(sample, default=str)
         )
         
-        response = self.model.generate_content(prompt)
-        viz_type = response.text.strip().lower()
+        viz_type = self._generate_content(prompt, temperature=0.1)
         
         # Validate
         valid_types = ['table', 'bar', 'line', 'pie', 'scatter', 'heatmap']

@@ -9,23 +9,23 @@ import os
 
 class Settings(BaseSettings):
     """Application settings from environment variables"""
+    model_config = {"env_file": ".env", "case_sensitive": False}
     
     # Database (SQLite by default - no installation required!)
     database_url: str = "sqlite:///./talktodata.db"
     
-    # LLM
-    gemini_api_key: str
+    # LLM Configuration
+    llm_provider: str = "gemini"  # Options: "gemini" or "ollama"
+    gemini_api_key: str = ""
+    ollama_base_url: str = "http://localhost:11434"
+    ollama_model: str = "mistral:latest"  # Default Ollama model
     
-    # File Storage
+    # File Upload Settingse
     upload_dir: str = "./uploads"
     max_file_size_mb: int = 100
     
     # Application
     debug: bool = False
-    
-    class Config:
-        env_file = ".env"
-        case_sensitive = False
 
 
 @lru_cache()
@@ -36,10 +36,15 @@ def get_settings() -> Settings:
 
 # Database engine and session
 settings = get_settings()
+
+# FORCE SQLite for local development - override any environment variables
+SQLITE_URL = "sqlite:///./talktodata.db"
+print(f"[DATABASE] Using: {SQLITE_URL}")
+
 engine = create_engine(
-    settings.database_url,
+    SQLITE_URL,  # Hardcoded SQLite - ignores settings.database_url
     echo=settings.debug,
-    pool_pre_ping=True
+    connect_args={"check_same_thread": False}  # Required for SQLite
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
@@ -57,7 +62,7 @@ def init_database():
     """Initialize database tables"""
     from models import Base
     Base.metadata.create_all(bind=engine)
-    print("✅ Database tables created successfully!")
+    print("[SUCCESS] Database tables created successfully!")
 
 
 # Ensure upload directory exists

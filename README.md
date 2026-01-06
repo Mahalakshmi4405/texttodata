@@ -7,6 +7,7 @@ Enterprise-grade natural language to data querying system using LLM Agents. Uplo
 - 🗂️ **Multi-Format Support**: CSV, Excel, JSON, SQL dumps, Parquet, and more
 - 🧠 **AI-Powered Analysis**: Automatic data profiling with quality assessment and insights
 - 💬 **Natural Language Queries**: Ask questions in plain English - no SQL knowledge needed
+- 🤖 **Dual LLM Support**: Choose between Google Gemini (cloud) or Ollama (local, private, free)
 - 📊 **Smart Visualizations**: Auto-generated charts (bar, line, pie, scatter) and tables
 - 💾 **Session Management**: Handle multiple datasets with isolated contexts
 - ⚡ **Real-time Query Execution**: Powered by DuckDB for lightning-fast in-memory queries
@@ -16,9 +17,9 @@ Enterprise-grade natural language to data querying system using LLM Agents. Uplo
 
 ### Backend
 - **FastAPI**: High-performance Python web framework
-- **Google Gemini**: LLM for natural language understanding
+- **Google Gemini / Ollama**: LLM for natural language understanding (switchable)
 - **DuckDB**: In-memory SQL query engine
-- **PostgreSQL**: Session and metadata storage
+- **PostgreSQL/SQLite**: Session and metadata storage
 - **Pandas**: Data processing and analysis
 - **SQLAlchemy**: ORM and database management
 
@@ -57,37 +58,27 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 # Install dependencies
 pip install -r requirements.txt
 
-# Set up environment variables
-cp .env.example .env
-# Edit .env and add your GEMINI_API_KEY
+# Choose your AI provider (see LLM_SETUP.md for details)
+# Default: Gemini (already configured)
+# For local Ollama: Edit backend/.env and set LLM_PROVIDER=ollama
 ```
 
-**Environment Configuration** (`.env`):
-```env
-DATABASE_URL=sqlite:///./talktodata.db  # Or use PostgreSQL
-GEMINI_API_KEY=your_api_key_here
-UPLOAD_DIR=./uploads
-DEBUG=true
-```
-
-```bash
-# Start the backend server
-python main.py
-```
-
-Backend will run at `http://localhost:8000`
-
-### 3. Frontend Setup
+### 3. Frontend Setup & Run Everything
 
 ```bash
 # From project root
 npm install
 
-# Start development server
+# Start BOTH backend and frontend with ONE command!
 npm run dev
 ```
 
-Frontend will run at `http://localhost:3000`
+**That's it!** 🎉
+
+- Backend runs at: **http://localhost:8000**
+- Frontend runs at: **http://localhost:3000**
+
+Open **http://localhost:3000** in your browser!
 
 ## 📖 Usage Guide
 

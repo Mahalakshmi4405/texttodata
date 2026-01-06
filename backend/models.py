@@ -16,7 +16,7 @@ class Session(Base):
     name = Column(String(255), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    metadata = Column(JSON, default={})
+    session_metadata = Column(JSON, default={})
     
     # Relationships
     data_sources = relationship("DataSource", back_populates="session", cascade="all, delete-orphan")
