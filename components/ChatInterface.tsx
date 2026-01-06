@@ -3,8 +3,9 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Loader2, AlertCircle, CheckCircle, Clock } from 'lucide-react';
+import { Send, Loader2, AlertCircle, CheckCircle, Clock, ChevronDown, ChevronUp } from 'lucide-react';
 import { dataAPI, QueryResult } from '@/lib/api';
+import InlineChart from './InlineChart';
 
 interface Message {
     id: string;
@@ -33,8 +34,7 @@ export default function ChatInterface({ sessionId, suggestedQueries = [] }: Chat
         scrollToBottom();
     }, [messages]);
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
+    const handleSend = async () => {
         if (!input.trim() || isLoading) return;
 
         const userMessage: Message = {
@@ -55,7 +55,7 @@ export default function ChatInterface({ sessionId, suggestedQueries = [] }: Chat
                 id: (Date.now() + 1).toString(),
                 type: result.success ? 'assistant' : 'error',
                 content: result.success
-                    ? `Query executed successfully in ${result.execution_time_ms.toFixed(2)}ms`
+                    ? (result.ai_explanation || `Query executed successfully in ${result.execution_time_ms.toFixed(2)}ms`)
                     : result.error || 'Query failed',
                 queryResult: result,
                 timestamp: new Date(),
@@ -90,7 +90,7 @@ export default function ChatInterface({ sessionId, suggestedQueries = [] }: Chat
                             Ask me anything about your data
                         </h3>
                         <p className="text-dark-400 mb-6">
-                            I'll translate your questions into SQL and execute them
+                            I'll analyze your data and provide insights with visualizations
                         </p>
 
                         {suggestedQueries.length > 0 && (
@@ -113,52 +113,14 @@ export default function ChatInterface({ sessionId, suggestedQueries = [] }: Chat
                 )}
 
                 {messages.map((message) => (
-                    <div
-                        key={message.id}
-                        className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}
-                    >
-                        <div
-                            className={`max-w-[80%] rounded-2xl p-4 animate-slide-up ${message.type === 'user'
-                                    ? 'bg-primary-600 text-white'
-                                    : message.type === 'error'
-                                        ? 'glass-dark border-red-500/30'
-                                        : 'glass'
-                                }`}
-                        >
-                            <div className="flex items-start gap-2 mb-2">
-                                {message.type === 'assistant' && (
-                                    <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
-                                )}
-                                {message.type === 'error' && (
-                                    <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
-                                )}
-                                <p className="text-sm">{message.content}</p>
-                            </div>
-
-                            {message.queryResult?.sql_query && (
-                                <div className="mt-3 p-3 rounded-lg bg-black/30 border border-dark-700">
-                                    <p className="text-xs text-dark-400 mb-1">Generated SQL:</p>
-                                    <code className="text-xs text-primary-300 font-mono">
-                                        {message.queryResult.sql_query}
-                                    </code>
-                                </div>
-                            )}
-
-                            {message.queryResult?.execution_time_ms && (
-                                <div className="flex items-center gap-1 mt-2 text-xs text-dark-400">
-                                    <Clock className="w-3 h-3" />
-                                    {message.queryResult.execution_time_ms.toFixed(2)}ms
-                                </div>
-                            )}
-                        </div>
-                    </div>
+                    <ChatMessage key={message.id} message={message} />
                 ))}
 
                 {isLoading && (
                     <div className="flex justify-start">
                         <div className="glass rounded-2xl p-4 flex items-center gap-3">
                             <Loader2 className="w-5 h-5 text-primary-400 animate-spin" />
-                            <span className="text-dark-300">Analyzing query...</span>
+                            <span className="text-dark-300">Analyzing your question...</span>
                         </div>
                     </div>
                 )}
@@ -168,27 +130,94 @@ export default function ChatInterface({ sessionId, suggestedQueries = [] }: Chat
 
             {/* Input Area */}
             <div className="border-t border-dark-800 p-4">
-                <form onSubmit={handleSubmit} className="flex gap-3">
+                <div className="flex gap-2">
                     <input
                         type="text"
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
+                        onKeyPress={(e) => e.key === 'Enter' && handleSend()}
                         placeholder="Ask a question about your data..."
+                        className="flex-1 px-4 py-3 rounded-lg glass border border-dark-700 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 outline-none transition-all text-white placeholder-dark-400"
                         disabled={isLoading}
-                        className="flex-1 px-4 py-3 rounded-xl glass text-white placeholder-dark-500 focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-50"
                     />
                     <button
-                        type="submit"
-                        disabled={isLoading || !input.trim()}
-                        className="px-6 py-3 rounded-xl bg-primary-600 hover:bg-primary-700 text-white font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                        onClick={handleSend}
+                        disabled={!input.trim() || isLoading}
+                        className="px-6 py-3 bg-primary-600 hover:bg-primary-700 disabled:bg-dark-700 disabled:cursor-not-allowed rounded-lg transition-all hover-lift flex items-center gap-2"
                     >
-                        {isLoading ? (
-                            <Loader2 className="w-5 h-5 animate-spin" />
-                        ) : (
-                            <Send className="w-5 h-5" />
-                        )}
+                        <Send className="w-5 h-5" />
                     </button>
-                </form>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// Separate component for chat messages
+function ChatMessage({ message }: { message: Message }) {
+    const [showSQL, setShowSQL] = useState(false);
+
+    return (
+        <div className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}>
+            <div
+                className={`max-w-[85%] rounded-2xl p-4 animate-slide-up ${message.type === 'user'
+                    ? 'bg-primary-600 text-white'
+                    : message.type === 'error'
+                        ? 'glass-dark border-red-500/30'
+                        : 'glass'
+                    }`}
+            >
+                {/* AI/Error Icon + Message */}
+                <div className="flex items-start gap-2">
+                    {message.type === 'assistant' && (
+                        <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
+                    )}
+                    {message.type === 'error' && (
+                        <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+                    )}
+                    <p className="text-sm leading-relaxed whitespace-pre-line flex-1">
+                        {message.content}
+                    </p>
+                </div>
+
+                {/* Inline Visualization */}
+                {message.queryResult?.success && message.queryResult.result_data && message.queryResult.result_data.length > 0 && (
+                    <div className="mt-4">
+                        <InlineChart
+                            type={message.queryResult.visualization_type as 'bar' | 'line' | 'pie' | 'table'}
+                            data={message.queryResult.result_data}
+                            columns={message.queryResult.columns || []}
+                        />
+                    </div>
+                )}
+
+                {/* Collapsible SQL Query (Optional) */}
+                {message.queryResult?.sql_query && (
+                    <div className="mt-3">
+                        <button
+                            onClick={() => setShowSQL(!showSQL)}
+                            className="flex items-center gap-1 text-xs text-dark-400 hover:text-dark-200 transition-colors"
+                        >
+                            {showSQL ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                            {showSQL ? 'Hide' : 'View'} SQL Query
+                        </button>
+                        {showSQL && (
+                            <div className="mt-2 p-3 rounded-lg bg-black/30 border border-dark-700">
+                                <code className="text-xs text-primary-300 font-mono block whitespace-pre-wrap break-all">
+                                    {message.queryResult.sql_query}
+                                </code>
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {/* Execution Time */}
+                {message.queryResult?.execution_time_ms !== undefined && (
+                    <div className="flex items-center gap-1 mt-2 text-xs text-dark-500">
+                        <Clock className="w-3 h-3" />
+                        {message.queryResult.execution_time_ms.toFixed(0)}ms
+                    </div>
+                )}
             </div>
         </div>
     );

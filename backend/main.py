@@ -10,7 +10,7 @@ import os
 from pathlib import Path
 from contextlib import asynccontextmanager
 
-from config import get_db, init_database, get_settings
+from config import get_db, init_database, get_settings, logger
 from models import Session, DataSource, QueryHistory
 from services.data_ingestor import DataIngestor
 from services.data_profiler import DataProfiler
@@ -23,10 +23,10 @@ from agents.llm_agent import LLMAgent
 async def lifespan(app: FastAPI):
     # Startup
     init_database()
-    print("[SUCCESS] Talk-to-Data AI Backend Ready!")
+    logger.info("[SUCCESS] Talk-to-Data AI Backend Ready!")
     yield
     # Shutdown (if needed)
-    print("[INFO] Shutting down...")
+    logger.info("[SHUTDOWN] Cleaning up...")
 
 # Initialize app
 app = FastAPI(
@@ -69,12 +69,16 @@ class QueryRequest(BaseModel):
     question: str
 
 class QueryResponse(BaseModel):
+    """Response model for query execution"""
     success: bool
-    sql_query: Optional[str]
-    result: Optional[List[Dict]]
-    error: Optional[str]
-    visualization_type: str
-    execution_time_ms: float
+    ai_explanation: str = ""  # Conversational analysis from AI
+    sql_query: str = ""
+    execution_time_ms: float = 0.0
+    visualization_type: str = "table"
+    result_data: List[Dict] = []
+    row_count: int = 0
+    columns: List[str] = []
+    error: str = ""
 
 
 # Routes
@@ -202,22 +206,22 @@ async def upload_data(
             row_count=len(df)
         )
         
-        # Profile the data
-        profile = data_profiler.profile(df)
-        suggested_queries = data_profiler.generate_suggested_queries(df)
+        # Create data profile
+        profile = data_profiler.generate_profile(df)
         
-        # Generate insights using LLM
+        # Generate AI insights
         insights_text = llm_agent.generate_insights(profile)
         
         # Save profile
-        session_manager.add_data_profile(
+        db_profile = session_manager.add_data_profile(
             db=db,
             data_source_id=data_source.id,
-            statistics=profile,
-            insights=insights_text,
-            quality_score=profile['data_quality']['overall_score'],
-            suggested_queries=suggested_queries
+            profile=profile,
+            insights=insights_text
         )
+        
+        # Keep the uploaded file - don't delete it
+        # File is stored at: uploads/session_{session_id}_{filename}
         
         # Register in query executor
         query_executor.register_dataframe(session_id, df, table_name="data")
@@ -301,6 +305,14 @@ async def execute_query(
             sql_query = refined_sql
         
         if success:
+            # Generate conversational AI explanation
+            ai_explanation = llm_agent.analyze_and_explain(
+                question=question,
+                sql_query=sql_query,
+                result_df=result_df,
+                execution_time=exec_time
+            )
+            
             # Suggest visualization
             viz_type = llm_agent.suggest_visualization(sql_query, result_df)
             
@@ -322,11 +334,14 @@ async def execute_query(
             
             return QueryResponse(
                 success=True,
+                ai_explanation=ai_explanation,
                 sql_query=sql_query,
-                result=result_records,
-                error=None,
+                result_data=result_records,
+                row_count=len(result_df),
+                columns=list(result_df.columns),
                 visualization_type=viz_type,
-                execution_time_ms=exec_time
+                execution_time_ms=exec_time,
+                error=""
             )
         else:
             # Save error to history
@@ -344,10 +359,9 @@ async def execute_query(
             
             return QueryResponse(
                 success=False,
+                ai_explanation="",
                 sql_query=sql_query,
-                result=None,
                 error=error,
-                visualization_type="table",
                 execution_time_ms=exec_time
             )
     

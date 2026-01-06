@@ -23,12 +23,10 @@ class LLMAgent:
         
         if self.provider == "gemini":
             genai.configure(api_key=settings.gemini_api_key)
-            self.gemini_models = [
-                'gemini-2.5-flash-lite',
-                'gemini-flash-latest', 
-                'gemini-2.5-flash'
-            ]
-            self.model = genai.GenerativeModel(self.gemini_models[0])
+            # Use Gemma-3-4b-it model for conversational AI
+            self.model_name = 'models/gemma-3-4b-it'
+            self.model = genai.GenerativeModel(self.model_name)
+            print(f"[AI] Using model: {self.model_name}")
         
         elif self.provider == "ollama":
             self.ollama_base_url = settings.ollama_base_url
@@ -38,7 +36,7 @@ class LLMAgent:
             # Auto-select model if configured one not available
             if self.ollama_model not in self.available_models and self.available_models:
                 self.ollama_model = self.available_models[0]
-                print(f"⚠️ Configured model not found. Using: {self.ollama_model}")
+                print(f"[WARNING] Configured model not found. Using: {self.ollama_model}")
         
         else:
             raise ValueError(f"Unknown LLM provider: {self.provider}. Use 'gemini' or 'ollama'")
@@ -73,46 +71,49 @@ class LLMAgent:
             return response['response'].strip()
     
     def generate_sql(
-        self, 
-        question: str, 
+        self,
+        question: str,
         schema: Dict[str, str],
         sample_data: pd.DataFrame,
         table_name: str = "data"
     ) -> str:
         """
-        Convert natural language question to SQL
+        Generate SQL query from natural language question
         
         Args:
-            question: User's natural language query
-            schema: Dict of column_name -> data_type
+            question: Natural language query
+            schema: Column name -> data type mapping
             sample_data: Sample DataFrame for context
-            table_name: Name of the table in DuckDB
+            table_name: Name of the table to query
             
         Returns:
             SQL query string
         """
-        # Build schema description
-        schema_desc = f"Table: {table_name}\n"
-        schema_desc += "\n".join([f"  - {col}: {dtype}" for col, dtype in schema.items()])
+        # Format schema for prompt
+        schema_str = "\n".join([f'"{col}": {dtype}' for col, dtype in schema.items()])
         
-        # Get sample rows
-        sample_rows = sample_data.head(3).to_string(index=False)
+        # Get sample data preview
+        sample_str = sample_data.head(3).to_string(index=False)
         
-        # Build full prompt
-        system_prompt = SYSTEM_PROMPT.format(
-            schema=schema_desc,
-            sample_data=sample_rows
+        # Get column list
+        columns_list = ", ".join([f'"{col}"' for col in schema.keys()])
+        
+        # Build prompt with proper formatting
+        prompt = SYSTEM_PROMPT.format(
+            table_name=table_name,
+            columns=columns_list,
+            schema=schema_str,
+            sample_data=sample_str
         )
         
+        # Add the user question
+        full_prompt = f"{prompt}\n\nQuestion: {question}\n\nSQL Query:"
+        
         # Generate SQL
-        full_prompt = f"{system_prompt}\n\nUser question: {question}\n\nSQL query:"
+        sql = self._generate_content(full_prompt, temperature=0.2)
         
-        sql_query = self._generate_content(full_prompt, temperature=0.2)
-        
-        # Clean up the response
-        sql_query = self._clean_sql(sql_query)
-        
-        return sql_query
+        # Clean SQL
+        return self._clean_sql(sql)
     
     def refine_query(
         self,
@@ -219,13 +220,37 @@ class LLMAgent:
         Returns:
             Visualization type: table, bar, line, pie, scatter, heatmap
         """
-        if len(result_df) > 100:
-            return "table"
-        
         if len(result_df) == 0:
             return "table"
         
+        if len(result_df) > 100:
+            return "table"
+        
         columns = list(result_df.columns)
+        num_cols = len(columns)
+        
+        # Smart heuristics based on data structure
+        if num_cols == 1:
+            # Single column - show as table
+            return "table"
+        
+        if num_cols == 2:
+            # Two columns - likely comparison data
+            col1_unique = result_df[columns[0]].nunique()
+            col2_dtype = result_df[columns[1]].dtype
+            
+            # If second column is numeric and first has <20 categories
+            if pd.api.types.is_numeric_dtype(col2_dtype) and col1_unique <= 20:
+                # Check if it looks like time series
+                if any(word in columns[0].lower() for word in ['date', 'time', 'month', 'year', 'day']):
+                    return "line"
+                # For proportions/percentages with few categories
+                if col1_unique <= 8 and any(word in query.lower() for word in ['percent', 'proportion', 'share', 'distribution']):
+                    return "pie"
+                # Default to bar for comparisons
+                return "bar"
+        
+        # 3+ columns or complex queries - use AI
         sample = result_df.head(5).to_dict(orient='records')
         
         prompt = VISUALIZATION_TYPE_PROMPT.format(
@@ -239,13 +264,72 @@ class LLMAgent:
         
         # Validate
         valid_types = ['table', 'bar', 'line', 'pie', 'scatter', 'heatmap']
-        if viz_type not in valid_types:
-            # Default based on heuristics
-            if len(result_df.columns) == 2:
+        if viz_type.strip().lower() not in valid_types:
+            # Fallback based on data shape
+            if num_cols == 2:
                 return "bar"
             return "table"
         
-        return viz_type
+        return viz_type.strip().lower()
+    
+    def analyze_and_explain(
+        self,
+        question: str,
+        sql_query: str,
+        result_df: pd.DataFrame,
+        execution_time: float
+    ) -> str:
+        """
+        Analyze query results and provide conversational explanation like a data analyst
+        
+        Args:
+            question: User's original question
+            sql_query: SQL query that was executed
+            result_df: Results from query execution
+            execution_time: Query execution time in ms
+            
+        Returns:
+            Natural language explanation of findings
+        """
+        # Prepare result summary
+        row_count = len(result_df)
+        columns = list(result_df.columns)
+        
+        # Get sample data
+        sample_size = min(10, row_count)
+        sample_preview = result_df.head(sample_size).to_string(index=False)
+        
+        # Determine if this should have a visualization
+        has_viz = row_count > 0 and len(columns) >= 2 and row_count <= 100
+        
+        # Build analysis prompt
+        prompt = f"""You are a data analyst AI. The user asked: "{question}"
+
+I executed SQL and got {row_count} results in {execution_time:.2f}ms.
+
+Results data:
+{sample_preview}
+
+Column names: {', '.join(columns)}
+
+Your task:
+1. **Analyze the actual data values, not just describe the structure**
+2. **Calculate key metrics**: percentages, counts, averages, patterns
+3. **Identify insights**: What's working? What needs attention? Any trends?
+4. **Be specific with numbers**: "85% completion rate" not "most tasks completed"
+5. **Keep it conversational** (3-4 sentences) but data-driven
+
+{"NOTE: A visualization will be shown below, so you can reference it." if has_viz else ""}
+
+Example good response:
+"I analyzed your 30-day habit tracker. Your morning routine tasks ('Wake up on Time' and 'Got Baseline Hydrated') have a 95% completion rate, showing strong consistency. However, 'Hair Care' and 'Face Care' are only completed 30% of the time, suggesting these habits need more attention. Overall, you're tracking 10 different tasks with an average 68% completion rate."
+
+Provide your analysis now:"""
+        
+        # Generate conversational explanation
+        explanation = self._generate_content(prompt, temperature=0.4)
+        
+        return explanation.strip()
     
     def _clean_sql(self, sql: str) -> str:
         """Clean and validate SQL query"""

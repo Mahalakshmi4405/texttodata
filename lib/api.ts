@@ -38,11 +38,14 @@ export interface DataProfile {
 
 export interface QueryResult {
     success: boolean;
+    ai_explanation?: string;
     sql_query?: string;
-    result?: any[];
-    error?: string;
-    visualization_type: string;
     execution_time_ms: number;
+    visualization_type: string;
+    result_data?: any[];
+    row_count?: number;
+    columns?: string[];
+    error?: string;
 }
 
 export interface QueryHistoryItem {
