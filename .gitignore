@@ -1,0 +1,66 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.pyc
+venv/
+.venv/
+env/
+ENV/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Database files
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+sample_data.db
+sales.db
+talktodata.db
+
+# Uploads and user data
+uploads/
+*.xlsx
+*.csv
+*.json
+*.parquet
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Next.js
+.next/
+out/
+build/
+dist/
+
+# Debug and log files
+*.log
+debug_*.py
+debug_*.txt
+error_log*.txt
+session_debug.txt
+models.txt
+valid_models.txt
+test_llm_output.txt
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
