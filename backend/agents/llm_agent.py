@@ -5,12 +5,16 @@ from config import get_settings
 import pandas as pd
 from typing import Dict, Optional, Tuple
 import json
+import sqlparse
+from sqlparse.sql import IdentifierList, Identifier, Where, Token
+from sqlparse.tokens import Keyword, DML
 from agents.prompts import (
     SYSTEM_PROMPT, 
     QUERY_REFINEMENT_PROMPT, 
     INSIGHTS_GENERATION_PROMPT,
     VISUALIZATION_TYPE_PROMPT
 )
+
 
 
 class LLMAgent:
@@ -152,17 +156,17 @@ class LLMAgent:
     def generate_insights(
         self,
         profile: Dict,
-        max_insights: int = 7
+        max_insights: int = 5
     ) -> str:
         """
         Generate natural language insights from data profile
         
         Args:
             profile: Data profile dictionary
-            max_insights: Maximum number of insights
+            max_insights: Maximum number of insights (default 5)
             
         Returns:
-            Human-readable insights text
+            Human-readable insights text (concise bullet points)
         """
         # Format column stats
         col_stats = []
@@ -191,8 +195,50 @@ class LLMAgent:
         response = self.model.generate_content(prompt)
         insights_text = self._get_response_text(response)
         
-        # Try to parse as JSON, fallback to raw text
+        # Post-process: Ensure concise bullet points
+        insights_text = self._format_concise_insights(insights_text, max_insights)
+        
         return insights_text
+
+    def _format_concise_insights(self, insights_text: str, max_insights: int = 5) -> str:
+        """
+        Post-process insights to ensure they are concise and properly formatted
+        
+        Args:
+            insights_text: Raw insights from LLM
+            max_insights: Maximum number of bullet points
+            
+        Returns:
+            Formatted concise insights
+        """
+        # Split into lines and find bullet points
+        lines = insights_text.strip().split('\n')
+        bullets = []
+        
+        for line in lines:
+            line = line.strip()
+            # Skip empty lines and titles
+            if not line or 'AI Insights' in line or 'Summary' in line:
+                continue
+            
+            # Remove bullet markers and clean up
+            line = line.lstrip('•-*').strip()
+            
+            if line:
+                # Truncate to 100 characters if needed
+                if len(line) > 100:
+                    line = line[:97] + '...'
+                bullets.append(line)
+        
+        # Limit to max_insights
+        bullets = bullets[:max_insights]
+        
+        # Format as bullet points
+        if bullets:
+            return '\n'.join([f'• {bullet}' for bullet in bullets])
+        else:
+            return "• Data quality analysis complete\n• Ready for querying"
+
     
     def suggest_visualization(
         self,
@@ -257,7 +303,7 @@ class LLMAgent:
         return viz_type
     
     def _clean_sql(self, sql: str) -> str:
-        """Clean and validate SQL query"""
+        """Clean and validate SQL query using AST parsing"""
         # Remove markdown code blocks
         sql = sql.replace('```sql', '').replace('```', '').strip()
         
@@ -271,11 +317,64 @@ class LLMAgent:
         
         sql = ' '.join(sql_lines)
         
-        # Safety check - block destructive operations
-        dangerous_keywords = ['DROP', 'DELETE', 'TRUNCATE', 'UPDATE', 'INSERT', 'ALTER']
-        sql_upper = sql.upper()
-        for keyword in dangerous_keywords:
-            if keyword in sql_upper:
-                raise ValueError(f"Unsafe SQL operation detected: {keyword}")
+        # Validate using AST parsing
+        is_valid, error_msg = self.validate_sql_query(sql)
+        if not is_valid:
+            raise ValueError(error_msg)
         
         return sql
+    
+    def validate_sql_query(self, query: str) -> Tuple[bool, Optional[str]]:
+        """
+        Validate SQL query using AST parsing for security
+        
+        Args:
+            query: SQL query to validate
+            
+        Returns:
+            (is_valid, error_message)
+        """
+        try:
+            # Parse the SQL query
+            parsed = sqlparse.parse(query)
+            
+            if not parsed:
+                return False, "Invalid SQL syntax: Unable to parse query"
+            
+            # Check for multiple statements (SQL injection prevention)
+            if len(parsed) > 1:
+                return False, "Multiple SQL statements detected. Only single SELECT queries are allowed"
+            
+            statement = parsed[0]
+            
+            # Get the statement type
+            stmt_type = statement.get_type()
+            
+            # Only allow SELECT and WITH (CTE) statements
+            if stmt_type not in ('SELECT', 'UNKNOWN'):  # UNKNOWN can be WITH clause
+                return False, f"Only SELECT queries are allowed. Detected: {stmt_type}"
+            
+            # Check for destructive keywords in tokens
+            dangerous_keywords = {
+                'DROP', 'DELETE', 'TRUNCATE', 'UPDATE', 'INSERT', 'ALTER',
+                'CREATE', 'REPLACE', 'EXEC', 'EXECUTE', 'CALL'
+            }
+            
+            # Traverse all tokens
+            for token in statement.flatten():
+                if token.ttype is Keyword:
+                    keyword_upper = token.value.upper()
+                    if keyword_upper in dangerous_keywords:
+                        return False, f"Unsafe SQL operation detected: {keyword_upper}. Only SELECT queries are allowed"
+            
+            # Check for system functions that could be dangerous
+            query_upper = query.upper()
+            dangerous_functions = ['LOAD_EXTENSION', 'ATTACH', 'DETACH', 'PRAGMA']
+            for func in dangerous_functions:
+                if func in query_upper:
+                    return False, f"Unauthorized function detected: {func}"
+            
+            return True, None
+            
+        except Exception as e:
+            return False, f"SQL validation error: {str(e)}"

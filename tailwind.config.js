@@ -90,20 +90,20 @@ module.exports = {
         themes: [
             {
                 aurora: {
-                    "primary": "#6366F1",    // Primary Button
-                    "primary-focus": "#4F46E5",
-                    "secondary": "#06B6D4",  // Secondary Button / Cyan
-                    "secondary-focus": "#0891B2",
-                    "accent": "#A855F7",     // AI Insights / Purple
-                    "neutral": "#1E293B",    // Card Background
-                    "base-100": "#0F172A",   // Main Background
-                    "base-200": "#111827",   // Secondary Background
+                    "primary": "#8B5CF6",      // Vibrant Purple (buttons, accents)
+                    "primary-focus": "#7C3AED",
+                    "secondary": "#10B981",     // Emerald Green (success, data quality)
+                    "secondary-focus": "#059669",
+                    "accent": "#F59E0B",        // Amber (highlights, warnings)
+                    "neutral": "#1F2937",       // Darker gray (cards)
+                    "base-100": "#111827",      // Deep dark background
+                    "base-200": "#0F172A",      // Darker background
                     "base-300": "#1E293B",
-                    "base-content": "#F8FAFC",
-                    "info": "#3B82F6",       // Chart Blue
-                    "success": "#22C55E",    // Data Quality Green
-                    "warning": "#F59E0B",
-                    "error": "#EF4444",
+                    "base-content": "#F9FAFB",  // High contrast text
+                    "info": "#3B82F6",          // Bright blue (charts)
+                    "success": "#10B981",       // Emerald (quality scores)
+                    "warning": "#F59E0B",       // Amber
+                    "error": "#EF4444",         // Red
                 },
             },
             "light",

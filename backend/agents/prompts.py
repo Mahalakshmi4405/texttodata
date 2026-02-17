@@ -55,7 +55,7 @@ Please generate a corrected SQL query that addresses this error. Return ONLY the
 """
 
 
-INSIGHTS_GENERATION_PROMPT = """You are an executive data analyst. Generate concise, business-focused AI insights from the dataset profile below.
+INSIGHTS_GENERATION_PROMPT = """You are an executive data analyst. Generate concise, actionable insights from the dataset profile.
 
 Dataset Overview:
 - Rows: {row_count}
@@ -68,26 +68,26 @@ Column Statistics:
 Data Quality Issues:
 {quality_issues}
 
-Requirements:
-1. Do NOT return JSON.
-2. Do NOT show technical explanations.
-3. Do NOT exceed 5 bullet points.
-4. Each point must be short (maximum 2 lines).
-5. Focus on business value, trends, anomalies, and key metrics.
-6. Avoid repeating obvious information.
-7. Use clear, executive-level language.
+STRICT REQUIREMENTS:
+1. Generate EXACTLY 3-5 bullet points (no more, no less)
+2. Each bullet: MAXIMUM 100 characters, ONE line only
+3. Focus on actionable insights and business value
+4. Highlight trends, anomalies, or key patterns
+5. Use executive-level language (avoid technical jargon)
+6. Do NOT repeat obvious information from the overview
+7. Do NOT return JSON or code blocks
 
-Output Format:
+OUTPUT FORMAT (follow exactly):
 
-Title: "AI Insights Summary"
+AI Insights Summary
 
-- [Insight 1]
-- [Insight 2]
-- [Insight 3]
-- [Insight 4]
-- [Insight 5] (optional)
+• [Concise insight 1 - max 100 chars]
+• [Concise insight 2 - max 100 chars]
+• [Concise insight 3 - max 100 chars]
+• [Optional insight 4 - max 100 chars]
+• [Optional insight 5 - max 100 chars]
 
-Return ONLY the title and bullet points. No other text.
+Return ONLY bullet points. No title, no extra text.
 """
 
 

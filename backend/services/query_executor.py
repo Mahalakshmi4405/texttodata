@@ -4,6 +4,7 @@ import duckdb
 import pandas as pd
 from typing import Dict, Tuple, Any, Optional
 import time
+from datetime import datetime, timedelta
 
 
 class QueryExecutor:
@@ -11,6 +12,11 @@ class QueryExecutor:
     
     def __init__(self):
         self.connections = {}  # session_id -> duckdb_connection
+        self.schema_cache = {}  # session_id -> cached schema
+        self.last_access = {}  # session_id -> last access timestamp
+        self.max_sessions = 10  # Maximum concurrent sessions
+        self.session_timeout = 3600  # 1 hour idle timeout (seconds)
+        self.max_schema_size = 10 * 1024 * 1024  # 10MB max schema size
     
     def register_dataframe(
         self, 
@@ -26,6 +32,15 @@ class QueryExecutor:
             df: Data to register
             table_name: Name to use for the table
         """
+        # Cleanup expired sessions before creating new ones
+        self._cleanup_expired_sessions()
+        
+        # Check session limit
+        if session_id not in self.connections and len(self.connections) >= self.max_sessions:
+            # Remove oldest session
+            oldest_session = min(self.last_access.keys(), key=lambda k: self.last_access[k])
+            self.close_session(oldest_session)
+        
         # Create or get connection for this session
         if session_id not in self.connections:
             self.connections[session_id] = duckdb.connect(':memory:')
@@ -34,6 +49,9 @@ class QueryExecutor:
         
         # Register the DataFrame
         conn.register(table_name, df)
+        
+        # Update last access time
+        self.last_access[session_id] = datetime.now()
     
     def execute_query(
         self, 
@@ -54,6 +72,9 @@ class QueryExecutor:
             return False, None, "No data registered for this session", 0.0
         
         conn = self.connections[session_id]
+        
+        # Update last access time
+        self.last_access[session_id] = datetime.now()
         
         start_time = time.time()
         
@@ -95,11 +116,31 @@ class QueryExecutor:
         except:
             return {}
     
+    
+    def _cleanup_expired_sessions(self):
+        """Remove sessions that have been idle for too long"""
+        current_time = datetime.now()
+        expired_sessions = []
+        
+        for session_id, last_time in self.last_access.items():
+            if (current_time - last_time).total_seconds() > self.session_timeout:
+                expired_sessions.append(session_id)
+        
+        for session_id in expired_sessions:
+            print(f"Cleaning up expired session: {session_id}")
+            self.close_session(session_id)
+    
     def close_session(self, session_id: int):
         """Close DuckDB connection for session"""
         if session_id in self.connections:
             self.connections[session_id].close()
             del self.connections[session_id]
+        
+        # Clean up cache and access tracking
+        if session_id in self.schema_cache:
+            del self.schema_cache[session_id]
+        if session_id in self.last_access:
+            del self.last_access[session_id]
     
     def clear_all_sessions(self):
         """Close all connections"""

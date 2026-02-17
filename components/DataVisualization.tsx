@@ -159,14 +159,20 @@ export default function DataVisualization({
                     <YAxis stroke="#94a3b8" />
                     <Tooltip
                         contentStyle={{
-                            backgroundColor: 'rgba(15, 23, 42, 0.9)',
-                            border: '1px solid rgba(255,255,255,0.1)',
+                            backgroundColor: 'rgba(31, 41, 55, 0.95)',
+                            border: '1px solid rgba(139, 92, 246, 0.3)',
                             borderRadius: '8px',
                         }}
                         labelFormatter={formatAxisTick}
                     />
                     <Legend verticalAlign="top" />
-                    <Bar dataKey={yKey} fill="#0ea5e9" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey={yKey} fill="url(#colorGradient)" radius={[8, 8, 0, 0]} />
+                    <defs>
+                        <linearGradient id="colorGradient" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#8B5CF6" stopOpacity={0.9} />
+                            <stop offset="100%" stopColor="#10B981" stopOpacity={0.9} />
+                        </linearGradient>
+                    </defs>
                 </BarChart>
             </ResponsiveContainer>
         );
@@ -190,8 +196,8 @@ export default function DataVisualization({
                     <YAxis stroke="#94a3b8" />
                     <Tooltip
                         contentStyle={{
-                            backgroundColor: 'rgba(15, 23, 42, 0.9)',
-                            border: '1px solid rgba(255,255,255,0.1)',
+                            backgroundColor: 'rgba(31, 41, 55, 0.95)',
+                            border: '1px solid rgba(16, 185, 129, 0.3)',
                             borderRadius: '8px',
                         }}
                         labelFormatter={formatAxisTick}
@@ -200,10 +206,10 @@ export default function DataVisualization({
                     <Line
                         type="monotone"
                         dataKey={yKey}
-                        stroke="#0ea5e9"
+                        stroke="#10B981"
                         strokeWidth={3}
-                        dot={{ fill: '#0ea5e9', r: 4 }}
-                        activeDot={{ r: 6 }}
+                        dot={{ fill: '#10B981', r: 5 }}
+                        activeDot={{ r: 7, fill: '#F59E0B' }}
                     />
                 </LineChart>
             </ResponsiveContainer>
@@ -261,13 +267,13 @@ export default function DataVisualization({
                     <YAxis dataKey={yKey} stroke="#94a3b8" name={yKey} />
                     <Tooltip
                         contentStyle={{
-                            backgroundColor: 'rgba(15, 23, 42, 0.9)',
-                            border: '1px solid rgba(255,255,255,0.1)',
+                            backgroundColor: 'rgba(31, 41, 55, 0.95)',
+                            border: '1px solid rgba(245, 158, 11, 0.3)',
                             borderRadius: '8px',
                         }}
                         cursor={{ strokeDasharray: '3 3' }}
                     />
-                    <Scatter name="Data" data={data} fill="#0ea5e9" />
+                    <Scatter name="Data" data={data} fill="#F59E0B" />
                 </ScatterChart>
             </ResponsiveContainer>
         );
